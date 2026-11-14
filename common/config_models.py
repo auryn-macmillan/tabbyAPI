@@ -424,6 +424,17 @@ class ModelConfig(BaseConfigModel):
         ),
         gt=0,
     )
+    shared_chunk_size: Optional[int] = Field(
+        None,
+        description=(
+            "Chunk size for prompt ingestion while another job is already generating\n"
+            "(default: None, which selects half of chunk_size rounded up to 256).\n"
+            "Lower values shorten the stretches in which a new prompt interrupts ongoing\n"
+            "generation; set it to chunk_size to keep full-size chunks under concurrent\n"
+            "load. Must be a multiple of 256 and no larger than chunk_size."
+        ),
+        gt=0,
+    )
     output_chunking: Optional[bool] = Field(
         True,
         description=(

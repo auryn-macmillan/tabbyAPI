@@ -693,6 +693,12 @@ class ExllamaV3Container:
         user_chunk_size = unwrap(kwargs.get("chunk_size"), 2048)
         self.chunk_size = self.adjust_chunk_size(user_chunk_size)
 
+        # Chunk size used for prompt ingestion while another job is generating
+        # (None = the engine default, half of chunk_size rounded up to the page size)
+        self.shared_chunk_size = self.adjust_shared_chunk_size(
+            kwargs.get("shared_chunk_size"), self.chunk_size
+        )
+
         # Output chunking
         output_chunking = unwrap(kwargs.get("output_chunking"), True)
         self.max_rq_tokens = self.chunk_size if output_chunking else None
@@ -932,6 +938,31 @@ class ExllamaV3Container:
             chunk_size = rounded_chunk_size
 
         return chunk_size
+
+    def adjust_shared_chunk_size(
+        self, user_shared_chunk_size: Optional[int], chunk_size: int
+    ) -> Optional[int]:
+        if user_shared_chunk_size is None:
+            return None
+
+        shared_chunk_size = max(256, user_shared_chunk_size)
+        rounded_chunk_size = (shared_chunk_size + 255) // 256 * 256
+        if shared_chunk_size != rounded_chunk_size:
+            xlogger.warning(
+                f"The given shared chunk size ({shared_chunk_size}) is "
+                "not a multiple of 256.\n"
+                "Overriding shared_chunk_size with an overestimated value of "
+                f"{rounded_chunk_size} tokens."
+            )
+            shared_chunk_size = rounded_chunk_size
+
+        if shared_chunk_size > chunk_size:
+            raise ValueError(
+                f"shared_chunk_size ({shared_chunk_size}) must not be larger than "
+                f"chunk_size ({chunk_size})."
+            )
+
+        return shared_chunk_size
 
     def job_max_rq_tokens(self, max_tokens: int) -> Optional[int]:
         """
@@ -1303,6 +1334,7 @@ class ExllamaV3Container:
                 tokenizer=self.tokenizer,
                 max_batch_size=self.max_batch_size,
                 max_chunk_size=self.chunk_size,
+                shared_chunk_size=self.shared_chunk_size,
                 recurrent_cache_size=config.memory.sysmem_recurrent_cache * 1024**2,
                 cpu_cache_size=config.memory.sysmem_kv_cache * 1024**2,
                 num_draft_tokens=self.draft_num_tokens,
